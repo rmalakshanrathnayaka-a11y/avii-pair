@@ -20,7 +20,7 @@ app.post('/pair', async (req, res) => {
     if (!number) return res.status(400).json({ error: 'Phone number required' });
 
     const cleanNumber = number.replace(/[^0-9]/g, '');
-    if (sessions.has(cleanNumber)) return res.status(400).json({ error: 'Session already exists' });
+    if (sessions.has(cleanNumber)) return res.status(400).json({ error: 'Wait 30s and try again' });
 
     try {
         const sessionDir = `./sessions/${cleanNumber}`;
@@ -50,24 +50,22 @@ app.post('/pair', async (req, res) => {
                 responded = true;
                 console.log(`[${cleanNumber}] Connected! Requesting pair code...`);
                 try {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise(r => setTimeout(r, 2000));
                     const code = await sock.requestPairingCode(cleanNumber);
                     console.log(`[${cleanNumber}] SUCCESS: ${code}`);
-                    res.json({ code: code });
+                    if (!res.headersSent) res.json({ code });
                 } catch (err) {
-                    console.error(`[${cleanNumber}] Pair code error:`, err.message);
+                    console.error(`[${cleanNumber}] Pair error:`, err.message);
                     if (!res.headersSent) res.status(500).json({ error: err.message });
                 }
             }
 
             if (connection === 'close') {
-                const shouldReconnect = lastDisconnect?.error?.output?.statusCode!== DisconnectReason.loggedOut;
-                console.log(`[${cleanNumber}] Connection closed. Reconnect: ${shouldReconnect}`);
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                console.log(`[${cleanNumber}] Closed. Code: ${statusCode}`);
                 sessions.delete(cleanNumber);
                 if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
-                if (!responded &&!res.headersSent) {
-                    res.status(500).json({ error: 'Connection closed before pair code' });
-                }
+                if (!responded &&!res.headersSent) res.status(500).json({ error: 'Connection failed' });
             }
         });
 
@@ -77,6 +75,4 @@ app.post('/pair', async (req, res) => {
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on ${PORT}`));
