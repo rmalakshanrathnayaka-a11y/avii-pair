@@ -1,1 +1,27 @@
-<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AVII PAIR</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0f;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}.card{background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1);padding:40px;border-radius:24px;max-width:450px;width:100%}h1{text-align:center;font-size:28px;margin-bottom:10px;background:linear-gradient(135deg,#a855f7,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.sub{text-align:center;opacity:0.6;margin-bottom:30px}input{width:100%;padding:16px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#fff;font-size:16px;margin-bottom:16px}button{width:100%;padding:16px;background:linear-gradient(135deg,#a855f7,#3b82f6);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:600;cursor:pointer}button:disabled{opacity:0.5}#result{margin-top:24px;padding:20px;background:rgba(0,0,0,0.3);border-radius:12px;display:none;text-align:center}.code{font-size:32px;letter-spacing:8px;font-family:monospace;margin:16px 0;color:#a855f7}.step{margin:8px 0;font-size:14px;opacity:0.8;text-align:left}</style></head><body><div class="card"><h1>AVII-PAIR</h1><p class="sub">Get WhatsApp Pair Code</p><input id="num" placeholder="94771234567" type="tel"><button id="btn" onclick="getCode()">Get Pair Code</button><div id="result"><p>Your Pair Code:</p><div class="code" id="code"></div><div class="step">1. WhatsApp → Linked Devices</div><div class="step">2. Link with phone number instead</div><div class="step">3. Enter this code</div></div></div><script>async function getCode(){const n=document.getElementById('num').value.replace(/[^0-9]/g,'');const b=document.getElementById('btn');const r=document.getElementById('result');if(n.length<10)return alert('Valid number needed');b.disabled=true;b.textContent='Connecting...';r.style.display='none';try{const d=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number:n})});const j=await d.json();if(j.error)throw new Error(j.error);document.getElementById('code').textContent=j.code;r.style.display='block';b.textContent='Get Pair Code'}catch(e){alert('Error: '+e.message);b.textContent='Get Pair Code'}b.disabled=false}</script></body></html>
+<script>
+document.getElementById('pairForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const number = document.getElementById('number').value;
+    const btn = document.getElementById('submitBtn');
+    btn.innerText = 'Connecting...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/pair', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number })
+        });
+        const data = await res.json();
+        if (data.code) {
+            alert('Pair Code: ' + data.code);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Failed: ' + err.message);
+    }
+    btn.innerText = 'Get Pair Code';
+    btn.disabled = false;
+});
+</script>
