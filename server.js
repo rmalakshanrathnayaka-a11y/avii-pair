@@ -1,74 +1,98 @@
-import express from 'express';
-import cors from 'cors';
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
-import { Boom } from '@hapi/boom';
-import pino from 'pino';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+const express = require('express');
+const pino = require('pino');
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  Browsers,
+  fetchLatestBaileysVersion,
+  DisconnectReason
+} = require('@whiskeysockets/baileys');
+const { Boom } = require('@hapi/boom');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
-if (!fs.existsSync('./sessions')) fs.mkdirSync('./sessions', { recursive: true });
+if (!fs.existsSync('./sessions')) fs.mkdirSync('./sessions');
 
-app.post('/api/pair', async (req, res) => {
-  const { number } = req.body;
-  if (!number) return res.status(400).json({ error: 'Number required' });
-
+// ඔයාගේ working logic එකෙන් ගත්ත connection function එක
+async function createPairCode(number) {
   const cleanNum = number.replace(/[^0-9]/g, '');
   const sessionPath = `./sessions/${cleanNum}`;
   
-  try {
-    if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
-    
-    const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-    const { version } = await fetchLatestBaileysVersion();
-    
-    const sock = makeWASocket({
-      version,
-      logger: pino({ level: 'silent' }),
-      printQRInTerminal: false,
-      auth: state,
-      browser: Browsers.macOS('Safari'), // මේක WhatsApp එකෙන් accept වෙනවා
-      syncFullHistory: false,
-      markOnlineOnConnect: false,
-      mobile: false
-    });
+  if (fs.existsSync(sessionPath)) {
+    fs.rmSync(sessionPath, { recursive: true, force: true });
+  }
 
-    sock.ev.on('creds.update', saveCreds);
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  const { version } = await fetchLatestBaileysVersion();
+  
+  const sock = makeWASocket({
+    version,
+    logger: pino({ level: 'silent' }),
+    printQRInTerminal: false,
+    auth: state,
+    browser: Browsers.macOS('Safari'), // ඔයාගේ code එකේ තියෙන රහස
+    syncFullHistory: false,
+    markOnlineOnConnect: false
+  });
 
-    // Connection එක open වෙනකන් ඉන්න
-    await new Promise((resolve, reject) => {
-      sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
-        if (connection === 'open') resolve();
-        if (connection === 'close') {
-          const code = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-          if (code !== DisconnectReason.restartRequired) reject(lastDisconnect?.error);
+  sock.ev.on('creds.update', saveCreds);
+
+  // Connection open වෙනකන් ඉන්නවා - ඔයාගේ logic එක
+  return new Promise(async (resolve, reject) => {
+    const timeout = setTimeout(() => {
+      sock.end();
+      reject(new Error('Connection timeout'));
+    }, 20000);
+
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect } = update;
+      
+      if (connection === 'open') {
+        clearTimeout(timeout);
+        try {
+          await new Promise(r => setTimeout(r, 2000)); // delay එක
+          const code = await sock.requestPairingCode(cleanNum);
+          setTimeout(() => sock.end(), 5000);
+          resolve(code);
+        } catch (e) {
+          reject(e);
         }
-      });
-      setTimeout(() => reject(new Error('Connection timeout')), 15000);
+      }
+      
+      if (connection === 'close') {
+        clearTimeout(timeout);
+        const code = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
+        if (code !== DisconnectReason.restartRequired) {
+          reject(lastDisconnect?.error || new Error('Connection closed'));
+        }
+      }
     });
+  });
+}
 
-    // Pair code request කරන්න
-    await new Promise(r => setTimeout(r, 3000)); // තත්පර 3ක් ඉන්න
-    const code = await sock.requestPairingCode(cleanNum);
-    
-    // තත්පර 5කින් socket එක close කරනවා
-    setTimeout(() => sock.end(), 5000);
-    
-    res.json({ code: code?.replace(/(\d{4})/g, '$1-').slice(0, -1) || code });
-    
+app.post('/api/pair', async (req, res) => {
+  const { number } = req.body;
+  if (!number || number.length < 10) {
+    return res.status(400).json({ error: 'Valid number required' });
+  }
+
+  try {
+    console.log(`Pair request for: ${number}`);
+    const code = await createPairCode(number);
+    const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+    res.json({ code: formatted });
   } catch (err) {
-    console.error('Pair Error:', err);
-    res.status(500).json({ error: err.message || 'Failed to get code. Try again.' });
+    console.error('Pair Error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to get code' });
   }
 });
 
-app.get('/', (req,res)=> res.sendFile(path.join(__dirname,'public/index.html')));
-app.listen(PORT, ()=> console.log('Pair Server Running'));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.listen(PORT, () => console.log(`AVII Pair Server Running on ${PORT}`));
