@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html lang="si">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVII-PAIR - WhatsApp Bot Pairing</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif}
+body{background:#0a0a0f;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at top,#1a1033,#0a0a0f)}
+.card{background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:32px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+h1{font-size:28px;background:linear-gradient(90deg,#a855f7,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;margin-bottom:8px}
+p.sub{text-align:center;color:#aaa;margin-bottom:24px;font-size:14px}
+input{width:100%;padding:14px 16px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:#fff;font-size:16px;margin-bottom:16px;outline:none}
+input:focus{border-color:#a855f7}
+button{width:100%;padding:14px;background:linear-gradient(90deg,#a855f7,#3b82f6);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:0.3s}
+button:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(168,85,247,0.3)}
+button:disabled{opacity:0.6;cursor:not-allowed}
+.code-box{margin-top:24px;padding:20px;background:rgba(0,0,0,0.5);border-radius:16px;text-align:center;display:none}
+.code{font-size:32px;letter-spacing:4px;font-family:monospace;color:#a855f7;margin:12px 0}
+.timer{color:#f59e0b;font-size:13px}
+.steps{margin-top:24px;font-size:13px;color:#bbb;line-height:1.6}
+.steps b{color:#fff}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>AVII-PAIR</h1>
+  <p class="sub">ඕන කෙනෙක්ට pair වෙන්න පුළුවන්</p>
+  <input id="number" type="tel" placeholder="9477xxxxxxx (country code එක්ක)">
+  <button id="btn" onclick="getCode()">Get Pair Code</button>
+
+  <div class="code-box" id="box">
+    <div>ඔයාගේ Pair Code</div>
+    <div class="code" id="code">---- ----</div>
+    <button onclick="copyCode()" style="padding:8px;font-size:14px;margin-top:8px">Copy</button>
+    <div class="timer" id="timer">Expires in 2:00</div>
+  </div>
+
+  <div class="steps">
+    <b>කොහොමද කරන්නේ:</b><br>
+    1. Number එක දාලා button ඔබන්න<br>
+    2. WhatsApp → Linked Devices → Link with phone number<br>
+    3. Code එක type කරන්න<br>
+    4. Done! Bot වැඩ
+  </div>
+</div>
+
+<script>
+async function getCode(){
+  const num = document.getElementById('number').value.trim();
+  const btn = document.getElementById('btn');
+  if(num.length < 10){alert('Number එක හරියට දාන්න');return}
+  btn.disabled = true; btn.textContent = 'Generating...';
+  try{
+    const res = await fetch(`/api/pair?number=${num}`);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    document.getElementById('code').textContent = data.code;
+    document.getElementById('box').style.display = 'block';
+    startTimer(120);
+  }catch(e){
+    alert('Error: '+e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Get Pair Code';
+  }
+}
+function copyCode(){
+  navigator.clipboard.writeText(document.getElementById('code').textContent);
+  alert('Copied!');
+}
+function startTimer(s){
+  const el = document.getElementById('timer');
+  const iv = setInterval(()=>{
+    const m = Math.floor(s/60), sec = s%60;
+    el.textContent = `Expires in ${m}:${sec.toString().padStart(2,'0')}`;
+    if(--s < 0){clearInterval(iv);el.textContent='Expired';}
+  },1000);
+}
+</script>
+</body>
+</html>
