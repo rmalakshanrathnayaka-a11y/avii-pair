@@ -4,8 +4,7 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   Browsers,
-  fetchLatestBaileysVersion,
-  DisconnectReason
+  fetchLatestBaileysVersion
 } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs');
@@ -17,10 +16,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 if (!fs.existsSync('./sessions')) fs.mkdirSync('./sessions');
 
-// ඔයාගේ working logic එකෙන් ගත්ත connection function එක
 async function createPairCode(number) {
   const cleanNum = number.replace(/[^0-9]/g, '');
   const sessionPath = `./sessions/${cleanNum}`;
@@ -32,46 +30,52 @@ async function createPairCode(number) {
   const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
   const { version } = await fetchLatestBaileysVersion();
   
+  console.log(`[${cleanNum}] Creating socket... Version: ${version}`);
+  
   const sock = makeWASocket({
     version,
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
     auth: state,
-    browser: Browsers.macOS('Safari'), // ඔයාගේ code එකේ තියෙන රහස
+    browser: Browsers.ubuntu('Chrome'), // macOS වෙනුවට Ubuntu දාමු - IP block අඩුයි
     syncFullHistory: false,
-    markOnlineOnConnect: false
+    markOnlineOnConnect: false,
+    connectTimeoutMs: 60000
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  // Connection open වෙනකන් ඉන්නවා - ඔයාගේ logic එක
   return new Promise(async (resolve, reject) => {
     const timeout = setTimeout(() => {
+      console.log(`[${cleanNum}] TIMEOUT: Connection not opened in 30s`);
       sock.end();
-      reject(new Error('Connection timeout'));
-    }, 20000);
+      reject(new Error('Connection timeout - Railway IP may be blocked by WhatsApp'));
+    }, 30000);
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect } = update;
+      console.log(`[${cleanNum}] Connection: ${connection}`);
       
       if (connection === 'open') {
         clearTimeout(timeout);
         try {
-          await new Promise(r => setTimeout(r, 2000)); // delay එක
+          console.log(`[${cleanNum}] Connected! Requesting pair code...`);
+          await new Promise(r => setTimeout(r, 2000));
           const code = await sock.requestPairingCode(cleanNum);
+          console.log(`[${cleanNum}] SUCCESS: ${code}`);
           setTimeout(() => sock.end(), 5000);
           resolve(code);
         } catch (e) {
+          console.log(`[${cleanNum}] Pair Error: ${e.message}`);
           reject(e);
         }
       }
       
       if (connection === 'close') {
         clearTimeout(timeout);
-        const code = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-        if (code !== DisconnectReason.restartRequired) {
-          reject(lastDisconnect?.error || new Error('Connection closed'));
-        }
+        const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
+        console.log(`[${cleanNum}] Closed. Code: ${statusCode}, Error: ${lastDisconnect?.error?.message}`);
+        reject(new Error(`Connection closed: ${lastDisconnect?.error?.message || 'Unknown'}`));
       }
     });
   });
@@ -89,8 +93,8 @@ app.post('/api/pair', async (req, res) => {
     const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
     res.json({ code: formatted });
   } catch (err) {
-    console.error('Pair Error:', err.message);
-    res.status(500).json({ error: err.message || 'Failed to get code' });
+    console.error(`Pair Error for ${number}:`, err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
