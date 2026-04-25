@@ -1,6 +1,14 @@
 {
   "name": "avii-pair-qr",
+  "version": "1.0.0",
   "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",
     "express": "^4.19.2",
