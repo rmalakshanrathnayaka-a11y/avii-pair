@@ -1,7 +1,7 @@
 
 import express from 'express';
 import cors from 'cors';
-import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, DisconnectReason } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,112 +14,85 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
-const OWNER_NUMBER = process.env.OWNER_NUMBER || '';
 
 if (!fs.existsSync('./sessions')) fs.mkdirSync('./sessions', { recursive: true });
 
-const delay = ms => new Promise(res => setTimeout(res, ms));
+const delay = ms => new Promise(r => setTimeout(r, ms));
 
 async function getPairingCode(number) {
   const clean = number.replace(/[^0-9]/g, '');
-  const sessionFolder = `./sessions/${clean}`;
+  const folder = `./sessions/${clean}`;
 
-  const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
+  // Always start fresh for pairing - delete old session
+  if (fs.existsSync(folder)) {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+  fs.mkdirSync(folder, { recursive: true });
 
+  const { state, saveCreds } = await useMultiFileAuthState(folder);
   const sock = makeWASocket({
-    logger: pino({ level: 'silent' }),
+    logger: pino({ level: 'fatal' }),
     printQRInTerminal: false,
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
+      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
     },
-    browser: ['AVII-PAIR', 'Chrome', '20.0.0'],
+    browser: ['Chrome (Linux)', '', ''],
     syncFullHistory: false,
-    markOnlineOnConnect: false,
-    connectTimeoutMs: 60000,
-    defaultQueryTimeoutMs: 0,
-    keepAliveIntervalMs: 10000,
-    generateHighQualityLinkPreview: false
+    markOnlineOnConnect: true,
+    connectTimeoutMs: 90000,
+    defaultQueryTimeoutMs: undefined,
+    keepAliveIntervalMs: 30000,
+    retryRequestDelayMs: 5000,
+    maxMsgRetryCount: 5
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  return new Promise(async (resolve, reject) => {
-    let resolved = false;
+  try {
+    // Wait for connection to be ready
+    await delay(3000);
 
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect } = update;
-
-      if (connection === 'open') {
-        // already paired
-        if (!resolved) {
-          resolved = true;
-          await sock.end();
-          resolve('ALREADY_PAIRED');
-        }
-      }
-
-      if (connection === 'close') {
-        const reason = lastDisconnect?.error?.output?.statusCode;
-        if (!resolved && reason !== DisconnectReason.loggedOut) {
-          // try again once
-        }
-      }
-    });
-
-    try {
-      // Wait a bit for socket to initialize
-      await delay(2000);
-
-      if (!state.creds.registered) {
-        const code = await sock.requestPairingCode(clean);
-        if (!resolved) {
-          resolved = true;
-          // keep socket alive for 2 minutes for user to enter code
-          setTimeout(async () => {
-            try { await sock.end(); } catch {}
-          }, 120000);
-          resolve(code);
-        }
-      } else {
-        if (!resolved) {
-          resolved = true;
-          await sock.end();
-          resolve('ALREADY_PAIRED');
-        }
-      }
-    } catch (err) {
-      console.error('Pairing error:', err);
-      if (!resolved) {
-        resolved = true;
-        try { await sock.end(); } catch {}
-        reject(new Error(err.message || 'Failed to get pairing code. Try again in 30 seconds.'));
-      }
+    if (state.creds.registered) {
+      await sock.logout();
+      await sock.end();
+      throw new Error('Already registered, retrying fresh...');
     }
-  });
+
+    console.log(`Requesting pairing code for ${clean}...`);
+    const code = await sock.requestPairingCode(clean);
+    console.log(`PAIR CODE for ${clean}: ${code}`);
+
+    // Keep connection alive for 3 minutes
+    setTimeout(async () => {
+      try {
+        await sock.end();
+        console.log(`Closed socket for ${clean}`);
+      } catch {}
+    }, 180000);
+
+    return code;
+  } catch (err) {
+    try { await sock.end(); } catch {}
+    console.error('Pair error:', err.message);
+    throw new Error(`Failed: ${err.message}. Make sure number is correct and WhatsApp is updated.`);
+  }
 }
 
 app.get('/api/pair', async (req, res) => {
+  const { number } = req.query;
+  if (!number) return res.status(400).json({ error: 'Number required' });
+
   try {
-    const { number } = req.query;
-    if (!number || number.replace(/[^0-9]/g, '').length < 10) {
-      return res.status(400).json({ error: 'Invalid number. Use format 9477xxxxxxx' });
-    }
     const code = await getPairingCode(number);
-    res.json({ code, number });
+    res.json({ success: true, code, number, expiresIn: '3 minutes' });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
-app.get('/api/status', (req, res) => {
-  res.json({ status: 'online', owner: OWNER_NUMBER, time: new Date().toISOString() });
-});
-
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`AVII Pair running on ${PORT}`);
-});
+app.listen(PORT, () => console.log('AVII-PAIR v3 running on ' + PORT));
