@@ -1,8 +1,9 @@
 {
   "name": "avii-public-pair",
   "version": "1.0.0",
-  "type": "module",
+  "description": "Public WhatsApp Pair Code Service",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
@@ -10,7 +11,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.9",
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "express": "^4.19.2",
     "cors": "^2.8.5",
     "pino": "^9.0.0",
