@@ -2,9 +2,9 @@
 import express from 'express';
 import cors from 'cors';
 import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
-import { MongoClient } from 'mongodb';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,15 +13,10 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || '';
 const OWNER_NUMBER = process.env.OWNER_NUMBER || '';
 
-let mongo;
-if (MONGODB_URI) {
-  mongo = new MongoClient(MONGODB_URI);
-  await mongo.connect();
-  console.log('MongoDB connected');
-}
+// make sessions folder
+if (!fs.existsSync('./sessions')) fs.mkdirSync('./sessions');
 
 const sessions = new Map();
 
@@ -40,17 +35,18 @@ async function getPairingCode(number) {
 
   sock.ev.on('creds.update', saveCreds);
 
-  if (!sock.authState.creds.registered) {
-    const code = await sock.requestPairingCode(clean);
-    sessions.set(clean, { sock, code, created: Date.now() });
-    setTimeout(() => {
-      try { sock.end(); } catch {}
-      sessions.delete(clean);
-    }, 120000);
-    return code;
-  } else {
-    return 'ALREADY_PAIRED';
-  }
+  return new Promise(async (resolve, reject) => {
+    if (!sock.authState.creds.registered) {
+      try {
+        const code = await sock.requestPairingCode(clean);
+        sessions.set(clean, { sock, code });
+        setTimeout(() => { try { sock.end(); } catch {} }, 120000);
+        resolve(code);
+      } catch (e) { reject(e); }
+    } else {
+      resolve('ALREADY_PAIRED');
+    }
+  });
 }
 
 app.get('/api/pair', async (req, res) => {
@@ -65,8 +61,8 @@ app.get('/api/pair', async (req, res) => {
   }
 });
 
-app.get('/api/status', (req, res) => {
-  res.json({ ok: true, owner: OWNER_NUMBER, active: sessions.size });
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => console.log(`AVII Pair running on ${PORT}`));
