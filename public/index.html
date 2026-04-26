@@ -1,112 +1,45 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AVII-PAIR</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #0d1117;
-            color: #c9d1d9;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .card {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 12px;
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-        }
-        h1 {
-            color: #58a6ff;
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
-        p { color: #8b949e; margin-bottom: 30px; }
-        input {
-            width: 100%;
-            padding: 12px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            color: #c9d1d9;
-            font-size: 16px;
-            margin-bottom: 20px;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            background: #238636;
-            border: none;
-            border-radius: 6px;
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        button:disabled { background: #484f58; cursor: not-allowed; }
-        #result {
-            margin-top: 20px;
-            padding: 15px;
-            background: #0d1117;
-            border-radius: 6px;
-            display: none;
-        }
-        .code { font-size: 24px; font-weight: bold; color: #58a6ff; letter-spacing: 3px; }
-    </style>
+  <title>Katabump Hybrid</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+    .card { background: #1e293b; padding: 30px; border-radius: 15px; width: 90%; max-width: 400px; text-align: center; }
+    input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; background: #334155; color: white; }
+    button { width: 100%; padding: 12px; margin: 5px 0; border: none; border-radius: 8px; background: #3b82f6; color: white; cursor: pointer; font-weight: bold; }
+    button:hover { background: #2563eb; }
+    #qr { margin-top: 20px; }
+    #qr img { width: 250px; border-radius: 10px; background: white; padding: 10px; }
+    .note { font-size: 12px; color: #94a3b8; margin-top: 15px; }
+  </style>
 </head>
 <body>
-    <div class="card">
-        <h1>AVII-PAIR</h1>
-        <p>Get WhatsApp Pair Code</p>
-        <form id="pairForm">
-            <input type="text" id="number" placeholder="94742260678" required>
-            <button type="submit" id="submitBtn">Get Pair Code</button>
-        </form>
-        <div id="result"></div>
-    </div>
+  <div class="card">
+    <h2>🚀 Katabump Hybrid</h2>
+    <input id="number" placeholder="947XXXXXXXX" />
+    <button onclick="getQR()">📱 Get QR Code</button>
+    <button onclick="getPair()" style="background:#10b981">🔢 Get Pairing Code</button>
+    <div id="qr"></div>
+    <div class="note">QR = Scan කරන්න | Pair = Console එකේ Code බලන්න</div>
+  </div>
 
-    <script>
-        document.getElementById('pairForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const number = document.getElementById('number').value;
-            const btn = document.getElementById('submitBtn');
-            const result = document.getElementById('result');
-            
-            btn.innerText = 'Connecting...';
-            btn.disabled = true;
-            result.style.display = 'none';
-
-            try {
-                const res = await fetch('/pair', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ number })
-                });
-                const data = await res.json();
-                
-                if (data.code) {
-                    result.innerHTML = `<div>Your Pair Code:</div><div class="code">${data.code}</div>`;
-                    result.style.display = 'block';
-                } else {
-                    result.innerHTML = `<div style="color:#f85149">Error: ${data.error}</div>`;
-                    result.style.display = 'block';
-                }
-            } catch (err) {
-                result.innerHTML = `<div style="color:#f85149">Failed: ${err.message}</div>`;
-                result.style.display = 'block';
-            }
-            
-            btn.innerText = 'Get Pair Code';
-            btn.disabled = false;
-        });
-    </script>
-</body>
+  <script>
+    async function getQR() {
+      const num = document.getElementById('number').value;
+      document.getElementById('qr').innerHTML = 'Loading...';
+      const res = await fetch('/getqr', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({number: num}) });
+      const data = await res.json();
+      if (data.qr) document.getElementById('qr').innerHTML = `<img src="${data.qr}"><p>Scan within 2 minutes</p>`;
+      else document.getElementById('qr').innerHTML = `<p style="color:red">${data.error}</p>`;
+    }
+    async function getPair() {
+      const num = document.getElementById('number').value;
+      document.getElementById('qr').innerHTML = 'Generating...';
+      const res = await fetch('/getpair', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({number: num}) });
+      const data = await res.json();
+      document.getElementById('qr').innerHTML = `<p style="color:#10b981">${data.message}<br>Check Console!</p>`;
+    }
+  </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9f2349635ce20411',t:'MTc3NzE4MjM4Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
